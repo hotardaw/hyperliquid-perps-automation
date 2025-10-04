@@ -1,1 +1,1 @@
-# hyperliquid-perps-trade-executor
+# hyperliquid-perps-automation
