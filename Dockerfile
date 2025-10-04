@@ -30,4 +30,4 @@ RUN chown -R nodejs:nodejs /app
 USER nodejs
 
 # Run the application
-CMD ["node", "dist/index.js"]
+CMD ["node", "dist/server.js"]
