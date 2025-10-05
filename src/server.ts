@@ -4,6 +4,9 @@ import * as dotenv from 'dotenv';
 
 dotenv.config();
 
+console.log('🚀 Starting Hyperliquid Bot...');
+console.log('🔑 Private key configured:', !!process.env.HYPERLIQUID_PRIVATE_KEY);
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
