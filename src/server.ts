@@ -6,6 +6,9 @@ dotenv.config();
 
 console.log('🚀 Starting Hyperliquid Bot...');
 console.log('🔑 Private key configured:', !!process.env.HYPERLIQUID_PRIVATE_KEY);
+console.log('🔍 All env vars:', Object.keys(process.env).sort());
+console.log('🔍 Hyperliquid-related vars:',
+  Object.keys(process.env).filter(k => k.includes('HYPER')));
 
 const app = express();
 const PORT = process.env.PORT || 3000;
