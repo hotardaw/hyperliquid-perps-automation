@@ -281,6 +281,8 @@ export class DiscordWebhookService {
       BTC: '<:btc:1373703264796672020>',
       SOL: '<:sol:1373702715389120633>',
       ETH: '<:eth:1373703078456590358>',
+      DOGE: '<:dogecoin:1424858990231425154>',
+      FARTCOIN: '<:fartcoin:1424859533112508527>',
     };
 
     return emojiMap[ticker] || '';

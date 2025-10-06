@@ -348,16 +348,16 @@ async function openPosition(
 async function executeTradeFromWebhook(payload: WebhookPayload): Promise<void> {
   const coin = convertMarketToCoin(payload.market);
 
-  console.log('\n' + '='.repeat(60));
+  console.log('\n' + '='.repeat(40));
   console.log('📊 TRADE SIGNAL RECEIVED');
-  console.log('='.repeat(60));
+  console.log('='.repeat(40));
   console.log(`Strategy:     ${payload.strategy}`);
   console.log(`Market:       ${payload.market} (${coin})`);
   console.log(`Order:        ${payload.order.toUpperCase()}`);
   console.log(`Position:     ${payload.position.toUpperCase()}`);
   console.log(`Leverage:     ${payload.sizeByLeverage}x`);
   console.log(`Signal Price: $${payload.price}`);
-  console.log('='.repeat(60) + '\n');
+  console.log('='.repeat(40) + '\n');
 
   const currentPosition = await getCurrentPosition(coin);
 
@@ -513,9 +513,9 @@ async function executeShort(coin: string, leverage: number): Promise<{ size: num
 
 async function displayAccountInfo() {
   try {
-    console.log('\n' + '='.repeat(60));
+    console.log('\n' + '='.repeat(40));
     console.log('ACCOUNT STATS');
-    console.log('='.repeat(60));
+    console.log('='.repeat(40));
 
     const sdk = await getHyperliquidClient();
 
@@ -550,7 +550,7 @@ async function displayAccountInfo() {
       });
     }
 
-    console.log('='.repeat(60) + '\n');
+    console.log('='.repeat(40) + '\n');
   } catch (error) {
     console.error('❌ Failed to fetch account info:', error);
   }
