@@ -1,8 +1,0 @@
-services:
-  - type: web
-    name: momentum-trading-engine-gmx
-    runtime: docker
-    dockerfilePath: ./Dockerfile
-    envVars:
-      - key: HYPERLIQUID_PRIVATE_KEY
-        sync: false

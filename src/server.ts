@@ -1,6 +1,7 @@
 import express from 'express';
 import { Hyperliquid } from 'hyperliquid';
 import * as dotenv from 'dotenv';
+import { DiscordWebhookService } from './discordWebhook';
 
 dotenv.config();
 
@@ -13,6 +14,10 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
+
+const discordWebhook = process.env.DISCORD_WEBHOOK_URL
+  ? new DiscordWebhookService(process.env.DISCORD_WEBHOOK_URL)
+  : null;
 
 // ============================================================================
 // TYPES
@@ -210,17 +215,15 @@ async function openPosition(
   isBuy: boolean,
   size: number,
   leverage: number
-): Promise<void> {
+): Promise<any> {
   const sdk = await getHyperliquidClient();
 
   const side = isBuy ? 'LONG' : 'SHORT';
   console.log(`Opening ${side} position: ${size} ${coin} at ${leverage}x leverage`);
 
-  // Set leverage first
   await sdk.exchange.updateLeverage(coin, 'cross', leverage);
   console.log(`Leverage set to ${leverage}x`);
 
-  // Place market order
   const marketPrice = await getMarketPrice(coin);
 
   const orderRequest = {
@@ -238,6 +241,8 @@ async function openPosition(
 
   const result = await sdk.exchange.placeOrder(orderRequest);
   console.log(`Open order result:`, result);
+
+  return result; // Return the result
 }
 
 // ============================================================================
@@ -258,7 +263,6 @@ async function executeTradeFromWebhook(payload: WebhookPayload): Promise<void> {
   console.log(`Signal Price: $${payload.price}`);
   console.log('='.repeat(60) + '\n');
 
-  // Check current position
   const currentPosition = await getCurrentPosition(coin);
 
   if (currentPosition) {
@@ -269,46 +273,66 @@ async function executeTradeFromWebhook(payload: WebhookPayload): Promise<void> {
     console.log(`Current Position: NONE\n`);
   }
 
-  // Determine action based on desired position and current position
   const action = determineAction(payload.position, currentPosition);
   console.log(`Action: ${action}\n`);
 
-  // Execute action
-  switch (action) {
-    case 'OPEN_LONG':
-      await executeLong(coin, payload.sizeByLeverage);
-      break;
+  let orderResult: { size: number } | null = null;
 
-    case 'OPEN_SHORT':
-      await executeShort(coin, payload.sizeByLeverage);
-      break;
+  try {
+    switch (action) {
+      case 'OPEN_LONG':
+        orderResult = await executeLong(coin, payload.sizeByLeverage);
+        break;
 
-    case 'CLOSE':
-      if (currentPosition) {
-        await closePosition(coin, currentPosition);
-      }
-      break;
+      case 'OPEN_SHORT':
+        orderResult = await executeShort(coin, payload.sizeByLeverage);
+        break;
 
-    case 'REVERSE_TO_LONG':
-      if (currentPosition) {
-        await closePosition(coin, currentPosition);
-      }
-      await executeLong(coin, payload.sizeByLeverage);
-      break;
+      case 'CLOSE':
+        if (currentPosition) {
+          await closePosition(coin, currentPosition);
+          orderResult = { size: currentPosition.size };
+        }
+        break;
 
-    case 'REVERSE_TO_SHORT':
-      if (currentPosition) {
-        await closePosition(coin, currentPosition);
-      }
-      await executeShort(coin, payload.sizeByLeverage);
-      break;
+      case 'REVERSE_TO_LONG':
+        if (currentPosition) {
+          await closePosition(coin, currentPosition);
+        }
+        orderResult = await executeLong(coin, payload.sizeByLeverage);
+        break;
 
-    case 'NONE':
-      console.log('ℹ️ No action needed - already in correct position\n');
-      break;
+      case 'REVERSE_TO_SHORT':
+        if (currentPosition) {
+          await closePosition(coin, currentPosition);
+        }
+        orderResult = await executeShort(coin, payload.sizeByLeverage);
+        break;
+
+      case 'NONE':
+        console.log('ℹ️ No action needed - already in correct position\n');
+        break;
+    }
+
+    console.log('✅ Trade execution completed\n');
+
+    // Send success notification to Discord
+    if (discordWebhook && orderResult && action !== 'NONE') {
+      await discordWebhook.sendTradeAlert(payload, orderResult);
+    }
+  } catch (error) {
+    console.error('❌ Trade execution failed:', error);
+
+    // Send error notification to Discord
+    if (discordWebhook) {
+      await discordWebhook.sendErrorAlert(
+        payload,
+        error instanceof Error ? error.message : 'Unknown error'
+      );
+    }
+
+    throw error;
   }
-
-  console.log('✅ Trade execution completed\n');
 }
 
 /**
@@ -358,7 +382,7 @@ function determineAction(
 /**
  * Execute a long position
  */
-async function executeLong(coin: string, leverage: number): Promise<void> {
+async function executeLong(coin: string, leverage: number): Promise<{ size: number }> {
   const availableBalance = await getAvailableBalance();
   const marketPrice = await getMarketPrice(coin);
   const size = calculatePositionSize(availableBalance, leverage, marketPrice);
@@ -368,12 +392,14 @@ async function executeLong(coin: string, leverage: number): Promise<void> {
   console.log(`Position Size: ${size} ${coin}\n`);
 
   await openPosition(coin, true, size, leverage);
+
+  return { size };
 }
 
 /**
  * Execute a short position
  */
-async function executeShort(coin: string, leverage: number): Promise<void> {
+async function executeShort(coin: string, leverage: number): Promise<{ size: number }> {
   const availableBalance = await getAvailableBalance();
   const marketPrice = await getMarketPrice(coin);
   const size = calculatePositionSize(availableBalance, leverage, marketPrice);
@@ -383,6 +409,8 @@ async function executeShort(coin: string, leverage: number): Promise<void> {
   console.log(`Position Size: ${size} ${coin}\n`);
 
   await openPosition(coin, false, size, leverage);
+
+  return { size };
 }
 
 // ============================================================================
