@@ -82,10 +82,11 @@ async function getHyperliquidClient(): Promise<Hyperliquid> {
 
 /**
  * Convert TradingView market symbol to Hyperliquid coin
- * Example: BTC_USD -> BTC
+ * Example: BTC_USD -> BTC-PERP
  */
 function convertMarketToCoin(market: string): string {
-  return market.split('_')[0].toUpperCase();
+  const coin = market.split('_')[0].toUpperCase();
+  return `${coin}-PERP`;  // Add -PERP suffix
 }
 
 /**
@@ -93,10 +94,21 @@ function convertMarketToCoin(market: string): string {
  */
 async function getCurrentPosition(coin: string): Promise<Position | null> {
   const sdk = await getHyperliquidClient();
+
+  // Ensure walletAddress is set
+  if (!walletAddress) {
+    const { Wallet } = await import('ethers');
+    const wallet = new Wallet(process.env.HYPERLIQUID_PRIVATE_KEY!);
+    walletAddress = wallet.address;
+  }
+
   const userState = await sdk.info.perpetuals.getClearinghouseState(walletAddress);
 
+  // Strip -PERP suffix for comparison since API returns just "ETH", "BTC", etc.
+  const coinBase = coin.replace('-PERP', '');
+
   const assetPosition = userState.assetPositions.find(
-    (assetPos: any) => assetPos.position.coin === coin
+    (assetPos: any) => assetPos.position.coin === coinBase
   );
 
   if (!assetPosition) {
@@ -125,6 +137,14 @@ async function getCurrentPosition(coin: string): Promise<Position | null> {
  */
 async function getAvailableBalance(): Promise<number> {
   const sdk = await getHyperliquidClient();
+
+  // Ensure walletAddress is set
+  if (!walletAddress) {
+    const { Wallet } = await import('ethers');
+    const wallet = new Wallet(process.env.HYPERLIQUID_PRIVATE_KEY!);
+    walletAddress = wallet.address;
+  }
+
   const userState = await sdk.info.perpetuals.getClearinghouseState(walletAddress);
 
   const accountValue = parseFloat(userState.marginSummary.accountValue);
