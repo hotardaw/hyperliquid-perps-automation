@@ -90,7 +90,7 @@ async function getHyperliquidClient(): Promise<Hyperliquid> {
  */
 function convertMarketToCoin(market: string): string {
   const coin = market.split('_')[0].toUpperCase();
-  return `${coin}-PERP`;  // Add -PERP suffix
+  return `${coin}-PERP`;
 }
 
 /**
@@ -99,7 +99,6 @@ function convertMarketToCoin(market: string): string {
 async function getCurrentPosition(coin: string): Promise<Position | null> {
   const sdk = await getHyperliquidClient();
 
-  // Ensure walletAddress is set
   if (!walletAddress) {
     const { Wallet } = await import('ethers');
     const wallet = new Wallet(process.env.HYPERLIQUID_PRIVATE_KEY!);
@@ -142,7 +141,6 @@ async function getCurrentPosition(coin: string): Promise<Position | null> {
 async function getAvailableBalance(): Promise<number> {
   const sdk = await getHyperliquidClient();
 
-  // Ensure walletAddress is set
   if (!walletAddress) {
     const { Wallet } = await import('ethers');
     const wallet = new Wallet(process.env.HYPERLIQUID_PRIVATE_KEY!);
@@ -194,6 +192,8 @@ async function closePosition(coin: string, currentPosition: Position): Promise<v
   const isBuy = currentPosition.side === 'SHORT';
   const marketPrice = await getMarketPrice(coin);
 
+  console.log(`Market Price: $${marketPrice.toFixed(6)}`);
+
   const orderRequest = {
     coin: coin,
     is_buy: isBuy,
@@ -203,8 +203,31 @@ async function closePosition(coin: string, currentPosition: Position): Promise<v
     reduce_only: true,
   };
 
+  console.log('Submitting close order:', JSON.stringify(orderRequest, null, 2));
+
   const result = await sdk.exchange.placeOrder(orderRequest);
-  console.log(`Close order result:`, result);
+  console.log(`Close order result (full):`, JSON.stringify(result, null, 2));
+
+  // Check if order actually filled
+  if (result.response?.data?.statuses) {
+    const statuses = result.response.data.statuses;
+    console.log('Order statuses:', JSON.stringify(statuses, null, 2));
+
+    // Check for successful fills
+    const allFilled = statuses.every((s: any) =>
+      s.filled || s.status === 'filled' || (s.filled && s.filled !== '0')
+    );
+
+    if (!allFilled) {
+      console.error('❌ Close order was not fully filled!');
+      console.error('Statuses:', statuses);
+      throw new Error('Close order failed to fill - check logs for details');
+    }
+
+    console.log('✅ Close order filled successfully');
+  } else {
+    console.warn(`⚠️ Couldn't verify order fill status - no statuses in response`);
+  }
 }
 
 /**
@@ -226,6 +249,8 @@ async function openPosition(
 
   const marketPrice = await getMarketPrice(coin);
 
+  console.log(`Market Price: $${marketPrice.toFixed(6)}`);
+
   const orderRequest = {
     coin: coin,
     is_buy: isBuy,
@@ -233,16 +258,35 @@ async function openPosition(
     limit_px: marketPrice,
     order_type: { limit: { tif: 'Ioc' as const } },
     reduce_only: false,
-    // builder: {
-    //   b: "REF_HERE" || "",
-    //   f: 10 ?????
-    // }
   };
 
-  const result = await sdk.exchange.placeOrder(orderRequest);
-  console.log(`Open order result:`, result);
+  console.log('Submitting open order:', JSON.stringify(orderRequest, null, 2));
 
-  return result; // Return the result
+  const result = await sdk.exchange.placeOrder(orderRequest);
+  console.log(`Open order result (full):`, JSON.stringify(result, null, 2));
+
+  // Check if order actually filled
+  if (result.response?.data?.statuses) {
+    const statuses = result.response.data.statuses;
+    console.log('Order statuses:', JSON.stringify(statuses, null, 2));
+
+    // Check for successful fills
+    const allFilled = statuses.every((s: any) =>
+      s.filled || s.status === 'filled' || (s.filled && s.filled !== '0')
+    );
+
+    if (!allFilled) {
+      console.error('❌ Open order was not fully filled!');
+      console.error('Statuses:', statuses);
+      throw new Error('Open order failed to fill - check logs for details');
+    }
+
+    console.log('✅ Open order filled successfully');
+  } else {
+    console.warn(`⚠️ Couldn't verify order fill status - no statuses in response`);
+  }
+
+  return result;
 }
 
 // ============================================================================
@@ -311,19 +355,20 @@ async function executeTradeFromWebhook(payload: WebhookPayload): Promise<void> {
 
       case 'NONE':
         console.log('ℹ️ No action needed - already in correct position\n');
-        break;
+        // Don't send Discord notifs for NONE actions
+        return;
     }
 
     console.log('✅ Trade execution completed\n');
 
-    // Send success notification to Discord
-    if (discordWebhook && orderResult && action !== 'NONE') {
+    // Send success notif to Discord, only if action was taken
+    if (discordWebhook && orderResult) {
       await discordWebhook.sendTradeAlert(payload, orderResult);
     }
   } catch (error) {
     console.error('❌ Trade execution failed:', error);
 
-    // Send error notification to Discord
+    // Send error notif to Discord
     if (discordWebhook) {
       await discordWebhook.sendErrorAlert(
         payload,
@@ -342,7 +387,6 @@ function determineAction(
   desiredPosition: string,
   currentPosition: Position | null
 ): string {
-  // If we want to be flat
   if (desiredPosition === 'flat') {
     if (currentPosition) {
       return 'CLOSE';
@@ -350,26 +394,24 @@ function determineAction(
     return 'NONE';
   }
 
-  // If we want to be long
   if (desiredPosition === 'long') {
     if (!currentPosition) {
       return 'OPEN_LONG';
     }
     if (currentPosition.side === 'LONG') {
-      return 'NONE'; // Already in long
+      return 'NONE'; // already in long
     }
     if (currentPosition.side === 'SHORT') {
       return 'REVERSE_TO_LONG';
     }
   }
 
-  // If we want to be short
   if (desiredPosition === 'short') {
     if (!currentPosition) {
       return 'OPEN_SHORT';
     }
     if (currentPosition.side === 'SHORT') {
-      return 'NONE'; // Already in short
+      return 'NONE'; // already in short
     }
     if (currentPosition.side === 'LONG') {
       return 'REVERSE_TO_SHORT';
@@ -380,7 +422,7 @@ function determineAction(
 }
 
 /**
- * Execute a long position
+ * Execute a long
  */
 async function executeLong(coin: string, leverage: number): Promise<{ size: number }> {
   const availableBalance = await getAvailableBalance();
@@ -397,7 +439,7 @@ async function executeLong(coin: string, leverage: number): Promise<{ size: numb
 }
 
 /**
- * Execute a short position
+ * Execute a short
  */
 async function executeShort(coin: string, leverage: number): Promise<{ size: number }> {
   const availableBalance = await getAvailableBalance();
