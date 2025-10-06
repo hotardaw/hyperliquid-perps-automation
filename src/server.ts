@@ -6,14 +6,65 @@ dotenv.config();
 
 console.log('🚀 Starting Hyperliquid Bot...');
 console.log('🔑 Private key configured:', !!process.env.HYPERLIQUID_PRIVATE_KEY);
-console.log('🔍 All env vars:', Object.keys(process.env).sort());
-console.log('🔍 Hyperliquid-related vars:',
+console.log('🔍 Environment variables currently set:',
   Object.keys(process.env).filter(k => k.includes('HYPER')));
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
+
+// ============================================================================
+// STARTUP ACCOUNT INFO
+// ============================================================================
+
+async function displayAccountInfo() {
+  try {
+    console.log('\n' + '='.repeat(60));
+    console.log('💰 ACCOUNT STATUS');
+    console.log('='.repeat(60));
+
+    const sdk = await getHyperliquidClient();
+
+    if (!walletAddress) {
+      const { Wallet } = await import('ethers');
+      const wallet = new Wallet(process.env.HYPERLIQUID_PRIVATE_KEY!);
+      walletAddress = wallet.address;
+    }
+
+    const userState = await sdk.info.perpetuals.getClearinghouseState(walletAddress);
+
+    const accountValue = parseFloat(userState.marginSummary.accountValue);
+    const marginUsed = parseFloat(userState.marginSummary.totalMarginUsed);
+    const availableMargin = accountValue - marginUsed;
+
+    console.log(`Account Value:    $${accountValue.toFixed(2)}`);
+    console.log(`Margin Used:      $${marginUsed.toFixed(2)}`);
+    console.log(`Available:        $${availableMargin.toFixed(2)}`);
+
+    const activePositions = userState.assetPositions.filter(
+      (assetPos: any) => parseFloat(assetPos.position.szi) !== 0
+    );
+
+    console.log(`\nActive Positions: ${activePositions.length}`);
+
+    if (activePositions.length > 0) {
+      activePositions.forEach((assetPos: any) => {
+        const pos = assetPos.position;
+        const size = parseFloat(pos.szi);
+        const side = size > 0 ? 'LONG' : 'SHORT';
+        console.log(`  ${pos.coin}: ${side} ${Math.abs(size)} @ $${parseFloat(pos.entryPx).toFixed(2)} | PnL: $${parseFloat(pos.unrealizedPnl).toFixed(2)}`);
+      });
+    }
+
+    console.log('='.repeat(60) + '\n');
+  } catch (error) {
+    console.error('❌ Failed to fetch account info:', error);
+  }
+}
+
+// Display account info on startup (non-blocking)
+displayAccountInfo().catch(console.error);
 
 // ============================================================================
 // TYPES
