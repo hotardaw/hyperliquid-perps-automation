@@ -185,49 +185,76 @@ function calculatePositionSize(
  */
 async function closePosition(coin: string, currentPosition: Position): Promise<void> {
   const sdk = await getHyperliquidClient();
+  const maxAttempts = 3;
+  let attempt = 0;
 
   console.log(`Closing ${currentPosition.side} position: ${currentPosition.size} ${coin}`);
 
   // To close: if LONG, sell; if SHORT, buy
   const isBuy = currentPosition.side === 'SHORT';
-  const marketPrice = await getMarketPrice(coin);
 
-  console.log(`Market Price: $${marketPrice.toFixed(6)}`);
+  while (attempt < maxAttempts) {
+    attempt++;
 
-  const orderRequest = {
-    coin: coin,
-    is_buy: isBuy,
-    sz: currentPosition.size,
-    limit_px: marketPrice,
-    order_type: { limit: { tif: 'Ioc' as const } },
-    reduce_only: true,
-  };
+    try {
+      const marketPrice = await getMarketPrice(coin);
+      console.log(`Market Price: $${marketPrice.toFixed(6)} (Attempt ${attempt}/${maxAttempts})`);
 
-  console.log('Submitting close order:', JSON.stringify(orderRequest, null, 2));
+      const orderRequest = {
+        coin: coin,
+        is_buy: isBuy,
+        sz: currentPosition.size,
+        limit_px: marketPrice,
+        order_type: { limit: { tif: 'Ioc' as const } },
+        reduce_only: true,
+      };
 
-  const result = await sdk.exchange.placeOrder(orderRequest);
-  console.log(`Close order result (full):`, JSON.stringify(result, null, 2));
+      console.log('Submitting close order:', JSON.stringify(orderRequest, null, 2));
 
-  // Check if order actually filled
-  if (result.response?.data?.statuses) {
-    const statuses = result.response.data.statuses;
-    console.log('Order statuses:', JSON.stringify(statuses, null, 2));
+      const result = await sdk.exchange.placeOrder(orderRequest);
+      console.log(`Close order result (full):`, JSON.stringify(result, null, 2));
 
-    // Check for successful fills
-    const allFilled = statuses.every((s: any) =>
-      s.filled || s.status === 'filled' || (s.filled && s.filled !== '0')
-    );
+      // Check if order filled
+      if (result.response?.data?.statuses) {
+        const statuses = result.response.data.statuses;
+        console.log('Order statuses:', JSON.stringify(statuses, null, 2));
 
-    if (!allFilled) {
-      console.error('❌ Close order was not fully filled!');
-      console.error('Statuses:', statuses);
-      throw new Error('Close order failed to fill - check logs for details');
+        // Check for successful fill
+        const allFilled = statuses.every((s: any) =>
+          s.filled || s.status === 'filled' || (s.filled && s.filled !== '0')
+        );
+
+        if (allFilled) {
+          console.log('✅ Close order filled successfully');
+          return; // success - exit function
+        }
+
+        console.error(`❌ Close order was not fully filled on attempt ${attempt}`);
+        console.error('Statuses:', statuses);
+
+        if (attempt < maxAttempts) {
+          console.log(`Retrying close order (${attempt + 1}/${maxAttempts})...`);
+          await new Promise(resolve => setTimeout(resolve, 3000)); // 3 secs between retries
+        }
+      } else {
+        console.warn(`⚠️ Couldn't verify order fill status - no statuses in response`);
+        if (attempt < maxAttempts) {
+          console.log(`Retrying close order (${attempt + 1}/${maxAttempts})...`);
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+    } catch (error) {
+      console.error(`❌ Error on close attempt ${attempt}:`, error);
+      if (attempt < maxAttempts) {
+        console.log(`Retrying close order (${attempt + 1}/${maxAttempts})...`);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      } else {
+        throw error; // re-throw on final attempt
+      }
     }
-
-    console.log('✅ Close order filled successfully');
-  } else {
-    console.warn(`⚠️ Couldn't verify order fill status - no statuses in response`);
   }
+
+  throw new Error(`Close order failed after ${maxAttempts} attempts`);
 }
 
 /**
@@ -240,6 +267,8 @@ async function openPosition(
   leverage: number
 ): Promise<any> {
   const sdk = await getHyperliquidClient();
+  const maxAttempts = 3;
+  let attempt = 0;
 
   const side = isBuy ? 'LONG' : 'SHORT';
   console.log(`Opening ${side} position: ${size} ${coin} at ${leverage}x leverage`);
@@ -247,46 +276,69 @@ async function openPosition(
   await sdk.exchange.updateLeverage(coin, 'cross', leverage);
   console.log(`Leverage set to ${leverage}x`);
 
-  const marketPrice = await getMarketPrice(coin);
+  while (attempt < maxAttempts) {
+    attempt++;
 
-  console.log(`Market Price: $${marketPrice.toFixed(6)}`);
+    try {
+      const marketPrice = await getMarketPrice(coin);
+      console.log(`Market Price: $${marketPrice.toFixed(6)} (Attempt ${attempt}/${maxAttempts})`);
 
-  const orderRequest = {
-    coin: coin,
-    is_buy: isBuy,
-    sz: size,
-    limit_px: marketPrice,
-    order_type: { limit: { tif: 'Ioc' as const } },
-    reduce_only: false,
-  };
+      const orderRequest = {
+        coin: coin,
+        is_buy: isBuy,
+        sz: size,
+        limit_px: marketPrice,
+        order_type: { limit: { tif: 'Ioc' as const } },
+        reduce_only: false,
+      };
 
-  console.log('Submitting open order:', JSON.stringify(orderRequest, null, 2));
+      console.log('Submitting open order:', JSON.stringify(orderRequest, null, 2));
 
-  const result = await sdk.exchange.placeOrder(orderRequest);
-  console.log(`Open order result (full):`, JSON.stringify(result, null, 2));
+      const result = await sdk.exchange.placeOrder(orderRequest);
+      console.log(`Open order result (full):`, JSON.stringify(result, null, 2));
 
-  // Check if order actually filled
-  if (result.response?.data?.statuses) {
-    const statuses = result.response.data.statuses;
-    console.log('Order statuses:', JSON.stringify(statuses, null, 2));
+      // Check if order filled
+      if (result.response?.data?.statuses) {
+        const statuses = result.response.data.statuses;
+        console.log('Order statuses:', JSON.stringify(statuses, null, 2));
 
-    // Check for successful fills
-    const allFilled = statuses.every((s: any) =>
-      s.filled || s.status === 'filled' || (s.filled && s.filled !== '0')
-    );
+        // Check for successful fill
+        const allFilled = statuses.every((s: any) =>
+          s.filled || s.status === 'filled' || (s.filled && s.filled !== '0')
+        );
 
-    if (!allFilled) {
-      console.error('❌ Open order was not fully filled!');
-      console.error('Statuses:', statuses);
-      throw new Error('Open order failed to fill - check logs for details');
+        if (allFilled) {
+          console.log('✅ Open order filled successfully');
+          return result; // success - exit function
+        }
+
+        console.error(`❌ Open order was not fully filled on attempt ${attempt}`);
+        console.error('Statuses:', statuses);
+
+        if (attempt < maxAttempts) {
+          console.log(`Retrying open order (${attempt + 1}/${maxAttempts})...`);
+          await new Promise(resolve => setTimeout(resolve, 3000)); // 3 secs between retries
+        }
+      } else {
+        console.warn(`⚠️ Couldn't verify order fill status - no statuses in response`);
+        if (attempt < maxAttempts) {
+          console.log(`Retrying open order (${attempt + 1}/${maxAttempts})...`);
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+    } catch (error) {
+      console.error(`❌ Error on open attempt ${attempt}:`, error);
+      if (attempt < maxAttempts) {
+        console.log(`Retrying open order (${attempt + 1}/${maxAttempts})...`);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      } else {
+        throw error; // re-throw on final attempt
+      }
     }
-
-    console.log('✅ Open order filled successfully');
-  } else {
-    console.warn(`⚠️ Couldn't verify order fill status - no statuses in response`);
   }
 
-  return result;
+  // If we get here, all attempts failed
+  throw new Error(`Open order failed after ${maxAttempts} attempts`);
 }
 
 // ============================================================================
