@@ -15,7 +15,9 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 app.use((req, res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
+  if (req.method === 'POST' || (req.path !== '/health' && req.path !== '/')) {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
+  }
   next();
 });
 
