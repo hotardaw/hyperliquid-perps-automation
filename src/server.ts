@@ -14,6 +14,10 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
+  next();
+});
 
 const discordWebhook = process.env.DISCORD_WEBHOOK_URL
   ? new DiscordWebhookService(process.env.DISCORD_WEBHOOK_URL)
@@ -283,11 +287,14 @@ async function openPosition(
       const marketPrice = await getMarketPrice(coin);
       console.log(`Market Price: $${marketPrice.toFixed(6)} (Attempt ${attempt}/${maxAttempts})`);
 
+      // Round the limit price to appropriate precision
+      const limitPrice = parseFloat(marketPrice.toFixed(2));
+
       const orderRequest = {
         coin: coin,
         is_buy: isBuy,
         sz: size,
-        limit_px: marketPrice,
+        limit_px: limitPrice, // Use rounded price
         order_type: { limit: { tif: 'Ioc' as const } },
         reduce_only: false,
       };
@@ -574,29 +581,47 @@ app.get('/health', (req, res) => {
  * Webhook endpoint for TradingView
  */
 app.post('/webhook', async (req, res) => {
-  try {
-    console.log('Received webhook:', JSON.stringify(req.body, null, 2));
+  const timestamp = new Date().toISOString();
 
+  console.log('\n' + '='.repeat(60));
+  console.log(`[${timestamp}] 🔔 WEBHOOK RECEIVED`);
+  console.log('='.repeat(60));
+  console.log('Headers:', JSON.stringify(req.headers, null, 2));
+  console.log('Body:', JSON.stringify(req.body, null, 2));
+  console.log('Raw body type:', typeof req.body);
+  console.log('='.repeat(60) + '\n');
+
+  try {
     const payload: WebhookPayload = req.body;
+
+    console.log('Validation checks:');
+    console.log('  - Has market?', !!payload.market);
+    console.log('  - Has order?', !!payload.order);
+    console.log('  - Has position?', !!payload.position);
+    console.log('  - Exchange:', payload.exchange);
 
     // Validate payload
     if (!payload.market || !payload.order || !payload.position) {
+      console.error('❌ Missing required fields');
       return res.status(400).json({
         success: false,
         error: 'Missing required fields: market, order, or position',
       });
     }
 
-    // Validate exchange
     if (payload.exchange !== 'hyperliquid') {
+      console.error(`❌ Invalid exchange: ${payload.exchange}`);
       return res.status(400).json({
         success: false,
         error: `Invalid exchange: ${payload.exchange}. Expected: hyperliquid`,
       });
     }
 
-    // Execute trade
+    console.log('✅ Validation passed, executing trade...\n');
+
     await executeTradeFromWebhook(payload);
+
+    console.log('✅ Trade execution completed successfully\n');
 
     res.json({
       success: true,
@@ -605,7 +630,14 @@ app.post('/webhook', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('❌ Webhook error:', error);
+    console.error('\n' + '='.repeat(60));
+    console.error('❌ WEBHOOK ERROR');
+    console.error('='.repeat(60));
+    console.error('Error type:', error instanceof Error ? error.constructor.name : typeof error);
+    console.error('Error message:', error instanceof Error ? error.message : String(error));
+    console.error('Stack trace:', error instanceof Error ? error.stack : 'N/A');
+    console.error('='.repeat(60) + '\n');
+
     res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
