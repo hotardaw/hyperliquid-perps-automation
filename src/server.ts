@@ -11,10 +11,10 @@ console.log('🔍 Environment variables currently set:',
   Object.keys(process.env).filter(k => k.includes('HYPER')));
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 
 app.use((req, res, next) => {
-  if (req.method === 'POST' && req.path === '/webhook') {
+  if (req.method === 'POST') {
     console.log('🔍 RAW WEBHOOK REQUEST RECEIVED');
     console.log('Content-Type:', req.headers['content-type']);
   }
@@ -24,7 +24,7 @@ app.use((req, res, next) => {
 app.use(express.json());
 
 app.use((req, res, next) => {
-  if (req.method === 'POST' || (req.path !== '/health' && req.path !== '/')) {
+  if (req.method === 'POST' || (req.path !== '/health')) {
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
   }
   next();
@@ -591,7 +591,7 @@ app.get('/health', (req, res) => {
 /**
  * Webhook endpoint for TradingView
  */
-app.post('/webhook', async (req, res) => {
+app.post('/', async (req, res) => {
   const timestamp = new Date().toISOString();
 
   console.log('\n' + '='.repeat(40));
