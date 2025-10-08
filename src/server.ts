@@ -11,6 +11,7 @@ console.log('🔍 Environment variables currently set:',
   Object.keys(process.env).filter(k => k.includes('HYPER')));
 
 const app = express();
+const PORT = process.env.PORT || 3000;
 
 app.use((req, res, next) => {
   if (req.method === 'POST' && req.path === '/webhook') {
@@ -693,7 +694,8 @@ app.get('/positions', async (req, res) => {
   }
 });
 
-app.listen(() => {
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
   console.log(`Network: ${process.env.HYPERLIQUID_TESTNET === 'true' ? 'TESTNET' : 'MAINNET'}`);
 
   // Display account info after booting up server
