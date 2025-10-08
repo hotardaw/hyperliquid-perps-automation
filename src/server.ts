@@ -13,6 +13,8 @@ console.log('🔍 Environment variables currently set:',
 const app = express();
 const PORT = process.env.PORT || 10000;
 
+app.use(express.json());
+
 app.use((req, res, next) => {
   if (req.method === 'POST') {
     console.log('🔍 RAW WEBHOOK REQUEST RECEIVED');
@@ -21,7 +23,6 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(express.json());
 
 app.use((req, res, next) => {
   if (req.method === 'POST' || (req.path !== '/health')) {
@@ -425,7 +426,6 @@ async function executeTradeFromWebhook(payload: WebhookPayload): Promise<void> {
 
       case 'NONE':
         console.log('ℹ️ No action needed - already in correct position\n');
-        // Don't send Discord notifs for NONE actions
         return;
     }
 
