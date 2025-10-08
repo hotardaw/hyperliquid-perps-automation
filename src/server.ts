@@ -11,9 +11,17 @@ console.log('🔍 Environment variables currently set:',
   Object.keys(process.env).filter(k => k.includes('HYPER')));
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+
+app.use((req, res, next) => {
+  if (req.method === 'POST' && req.path === '/webhook') {
+    console.log('🔍 RAW WEBHOOK REQUEST RECEIVED');
+    console.log('Content-Type:', req.headers['content-type']);
+  }
+  next();
+});
 
 app.use(express.json());
+
 app.use((req, res, next) => {
   if (req.method === 'POST' || (req.path !== '/health' && req.path !== '/')) {
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
@@ -585,13 +593,14 @@ app.get('/health', (req, res) => {
 app.post('/webhook', async (req, res) => {
   const timestamp = new Date().toISOString();
 
-  console.log('\n' + '='.repeat(60));
+  console.log('\n' + '='.repeat(40));
   console.log(`[${timestamp}] 🔔 WEBHOOK RECEIVED`);
-  console.log('='.repeat(60));
-  console.log('Headers:', JSON.stringify(req.headers, null, 2));
-  console.log('Body:', JSON.stringify(req.body, null, 2));
-  console.log('Raw body type:', typeof req.body);
-  console.log('='.repeat(60) + '\n');
+  console.log('='.repeat(40));
+  console.log('Raw body:', JSON.stringify(req.body, null, 2));
+  console.log('Order value:', req.body.order);
+  console.log('Position value:', req.body.position);
+  console.log('Price value:', req.body.price);
+  console.log('='.repeat(40) + '\n');
 
   try {
     const payload: WebhookPayload = req.body;
@@ -632,13 +641,13 @@ app.post('/webhook', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('\n' + '='.repeat(60));
+    console.error('\n' + '='.repeat(40));
     console.error('❌ WEBHOOK ERROR');
-    console.error('='.repeat(60));
+    console.error('='.repeat(40));
     console.error('Error type:', error instanceof Error ? error.constructor.name : typeof error);
     console.error('Error message:', error instanceof Error ? error.message : String(error));
     console.error('Stack trace:', error instanceof Error ? error.stack : 'N/A');
-    console.error('='.repeat(60) + '\n');
+    console.error('='.repeat(40) + '\n');
 
     res.status(500).json({
       success: false,
@@ -684,8 +693,7 @@ app.get('/positions', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+app.listen(() => {
   console.log(`Network: ${process.env.HYPERLIQUID_TESTNET === 'true' ? 'TESTNET' : 'MAINNET'}`);
 
   // Display account info after booting up server
