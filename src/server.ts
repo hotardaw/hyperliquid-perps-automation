@@ -101,11 +101,36 @@ async function getHyperliquidClient(): Promise<Hyperliquid> {
 
 /**
  * Convert TradingView market symbol to Hyperliquid coin
- * Example: BTC_USD -> BTC-PERP
+ * Example: BTC_USD -> BTC
+ * Example: PEPE_USD -> kPEPE (Hyperliquid uses k prefix for small-cap tokens)
  */
 function convertMarketToCoin(market: string): string {
   const coin = market.split('_')[0].toUpperCase();
-  return `${coin}-PERP`;
+
+  // Map of coins that have special prefixes on Hyperliquid 
+  const coinMap: Record<string, string> = {
+    'PEPE': 'kPEPE',
+    'SHIB': 'kSHIB',
+    'BONK': 'kBONK',
+    'LUNC': 'kLUNC',
+    'FLOKI': 'kFLOKI',
+    'DOGS': 'kDOGS',
+    'NEIRO': 'kNEIRO',
+  };
+
+  return coinMap[coin] || coin;
+}
+
+/**
+ * Round price to appropriate precision based on magnitude
+ */
+function roundPrice(price: number): number {
+  if (price >= 1000) return parseFloat(price.toFixed(1));      // $1000+ -> 1 decimal
+  if (price >= 100) return parseFloat(price.toFixed(2));       // $100+ -> 2 decimals
+  if (price >= 1) return parseFloat(price.toFixed(2));         // $1+ -> 2 decimals
+  if (price >= 0.01) return parseFloat(price.toFixed(4));      // $0.01+ -> 4 decimals
+  if (price >= 0.0001) return parseFloat(price.toFixed(6));    // $0.0001+ -> 6 decimals
+  return parseFloat(price.toFixed(8));                          // Very small -> 8 decimals
 }
 
 /**
@@ -122,11 +147,9 @@ async function getCurrentPosition(coin: string): Promise<Position | null> {
 
   const userState = await sdk.info.perpetuals.getClearinghouseState(walletAddress);
 
-  // Strip -PERP suffix for comparison since API returns just "ETH", "BTC", etc.
-  const coinBase = coin.replace('-PERP', '');
-
+  // Hyperliquid API returns coins without any suffix (just "BTC", "kPEPE", etc.)
   const assetPosition = userState.assetPositions.find(
-    (assetPos: any) => assetPos.position.coin === coinBase
+    (assetPos: any) => assetPos.position.coin === coin
   );
 
   if (!assetPosition) {
@@ -298,14 +321,14 @@ async function openPosition(
       const marketPrice = await getMarketPrice(coin);
       console.log(`Market Price: $${marketPrice.toFixed(6)} (Attempt ${attempt}/${maxAttempts})`);
 
-      // Round the limit price to appropriate precision
-      const limitPrice = parseFloat(marketPrice.toFixed(2));
+      // Use dynamic precision instead of old '.toFixed(2)'
+      const limitPrice = roundPrice(marketPrice);
 
       const orderRequest = {
         coin: coin,
         is_buy: isBuy,
         sz: size,
-        limit_px: limitPrice, // Use rounded price
+        limit_px: limitPrice,
         order_type: { limit: { tif: 'Ioc' as const } },
         reduce_only: false,
       };
