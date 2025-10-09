@@ -23,9 +23,8 @@ app.use((req, res, next) => {
   next();
 });
 
-
 app.use((req, res, next) => {
-  if (req.method === 'POST' || (req.path !== '/health')) {
+  if (req.method === 'POST' || req.path !== '/health') {
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
   }
   next();
