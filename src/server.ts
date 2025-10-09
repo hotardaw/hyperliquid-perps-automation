@@ -84,6 +84,9 @@ async function getHyperliquidClient(): Promise<Hyperliquid> {
 
   await hyperliquidSDK.connect();
 
+  // Force initialization of symbol conversion
+  await hyperliquidSDK.refreshAssetMapsNow();
+
   // Derive wallet address from private key using ethers
   const { Wallet } = await import('ethers');
   const wallet = new Wallet(privateKey);
